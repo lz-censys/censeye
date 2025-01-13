@@ -21,14 +21,12 @@ from .const import DEFAULT_MAX_SEARCH_RESULTS
 from .gadget import GADGET_NAMESPACE, Gadget
 from .gadgets import unarmed_gadgets
 
-console = Console(record=True, soft_wrap=True)
-
 
 async def run_censeye(
     ip,
     depth=0,
     cache_dir=None,
-    console=console,
+    console=None,
     at_time=None,
     query_prefix=None,
     duo_reporting=False,
@@ -44,6 +42,9 @@ async def run_censeye(
 
     if gadgets is None:
         gadgets = set()
+
+    if not console:
+        console = Console(record=True, soft_wrap=True)
 
     c = censeye.Censeye(
         depth=depth,
@@ -236,7 +237,7 @@ async def run_censeye(
                 _build_tree(cip, child_tree)
 
         if root is None:
-            return
+            return searches, c.get_num_queries()
 
         tree = Tree(f"[link=https://search.censys.io/hosts/{root}][b]{root}[/b][/link]")
         _build_tree(root, tree)
@@ -244,7 +245,9 @@ async def run_censeye(
         console.print("Pivot Tree:")
         console.print(tree)
 
-    console.print(f"Total queries used: {c.get_num_queries()}")
+    num_queries = c.get_num_queries()
+    console.print(f"Total queries used: {num_queries}")
+    return searches, num_queries
 
 
 @click.command(
@@ -466,7 +469,16 @@ def main(
         console.print(table)
         sys.exit(0)
 
-    async def _run_worker(queue):
+    async def _run_worker(
+        queue, all_searches=None, num_queries=None, ip_to_search=None
+    ):
+        if all_searches is None:
+            all_searches = set()
+        if num_queries is None:
+            num_queries = [0]
+        if ip_to_search is None:
+            ip_to_search = {}
+
         while not queue.empty():
             ip = await queue.get()
             logging.debug(
@@ -475,7 +487,7 @@ def main(
                 f" cache_dir: {workspace} - workers: {workers} - at_time: {at_time} -"
                 f" depth: {depth} - save: {save} min_pivot_weight: {min_pivot_weight}"
             )
-            await run_censeye(
+            searches, queries = await run_censeye(
                 ip,
                 duo_reporting=query_prefix_count,
                 query_prefix=query_prefix,
@@ -486,6 +498,10 @@ def main(
                 config=cfg,
                 gadgets=armed_gadgets,
             )
+
+            ip_to_search[ip] = searches
+            all_searches.update(searches)
+            num_queries[0] += queries
             queue.task_done()
 
     async def _run_stdin():
@@ -495,11 +511,35 @@ def main(
             if ip:
                 await wqueue.put(_parse_ip(ip))
 
+        searches = set()
+        num_queries = [0]
         tasks = []
+        ip_to_search = {}
         for _ in range(input_workers):
-            tasks.append(_run_worker(wqueue))
+            tasks.append(_run_worker(wqueue, searches, num_queries, ip_to_search))
 
         await asyncio.gather(*tasks)
+
+        # create a reverse map of ip_to_search, search to ips -- for the final report
+        search_to_ip = defaultdict(set)
+        for ip, search_terms in ip_to_search.items():
+            for s in search_terms:
+                search_to_ip[s].add(ip)
+
+        console.print(f"\nTotal interesting search terms: {len(searches)}")
+
+        for s in searches:
+            ul = urllib.parse.quote(s)
+            # pad the host count with spaces to make the output look nice
+            hc_fmt = f"{len(search_to_ip[s])}".zfill(4)
+            console.print(
+                f" - ({hc_fmt}) [link=https://search.censys.io/search?resource=hosts&q={ul}]{s}[/link]"
+            )
+            for ip in search_to_ip[s]:
+                link = f"https://search.censys.io/hosts/{ip}"
+                console.print(f"   - [link={link}]{ip}[/link]")
+
+        console.print(f"\nTotal queries used: {num_queries[0]}")
 
     if ip == "-" or not ip:
         logging.info("processing IPs from stdin")

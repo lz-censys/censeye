@@ -340,3 +340,5 @@ fields:
   # not actually used unless the nobbler gadget is enabled.
   - field: nobbler.gadget.censeye
     weight: 1.0
+  - field: services.ldap.attributes
+    weight: 0.3

@@ -148,6 +148,8 @@ If your terminal supports it, each row is clickable and will navigate to the Cen
 
 The next report, labeled `Interesting search terms`, is an aggregate list of all Censys search statements that fall within the [rarity](#configuring-rarity) threshold—also referred to as "Interesting search terms."
 
+If Censeye has looked at multiple IP addresses (i.e., reading from stdin), there will be a final report of all the "interesting" search terms that were found across all the hosts along with the hosts associated with each search term.
+
 ## Auto Pivoting
 
 Like web crawlers discover websites, Censeye can be used to crawl Censys!
