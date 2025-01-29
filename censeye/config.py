@@ -502,11 +502,12 @@ class Config:
                 weight=1.0,
                 ignore=[],
             ),
-            Field(
-                name="services.ldap.attributes",
-                weight=0.3,
-                ignore=[],
-            ),
+            # Ldap inner-searches broken in Censys right now.
+            # Field(
+            #    name="services.ldap.attributes",
+            #    weight=0.3,
+            #    ignore=[],
+            # ),
         ]
 
     def _load_config(self, config_file):
