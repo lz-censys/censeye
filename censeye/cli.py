@@ -118,7 +118,7 @@ class CenseyeRunner:
         style_gadget_bold = Style(bold=True, color="#9FC3E2")
 
         for host in result:
-            link = host["href"]  # f"https://search.censys.io/hosts/{host['ip']}"
+            link = host.get("href", f"https://search.censys.io/hosts/{host['ip']}")
 
             """
             if "at_time" in host and host["at_time"] is not None:
@@ -294,10 +294,11 @@ class CenseyeRunner:
         result, searches = await self.censeye.run(self.ip)
         searches = sorted(searches)
 
-        self.results = self._mapper(result)
-        self.report(self.results, searches)
+        results = self._mapper(result)
+        # self.report(results, searches)
 
-        return searches, self.censeye.get_num_queries()
+        return searches, results, self.censeye.get_num_queries()
+        # return searches, self.censeye.get_num_queries()
 
 
 @click.command(
@@ -448,6 +449,7 @@ def main(
     load_session,
     output_format,
 ):
+    reading_from_stdin = False
     saved_args = {
         "ip": ip,
         "depth": depth,
@@ -531,8 +533,8 @@ def main(
         )
 
     ofile = sys.stdout
-    if save_session:
-        ofile = io.StringIO()
+    # if save_session:
+    #    ofile = io.StringIO()
 
     console = Console(record=True, soft_wrap=True, file=ofile)
 
@@ -557,6 +559,7 @@ def main(
             logging.error(f"Error loading session: {e}")
             exit(1)
 
+        print(session.results)
         CenseyeRunner(
             session.args.get("ip", None),
             console=console,
@@ -568,29 +571,18 @@ def main(
 
         exit(0)
 
-    async def _run_worker(
-        queue, all_searches=None, num_queries=None, ip_to_search=None, all_results=None
-    ):
-        if all_searches is None:
-            all_searches = set()
-        if num_queries is None:
-            num_queries = [0]
-        if ip_to_search is None:
-            ip_to_search = {}
-        if all_results is None:
-            all_results = []
-
+    async def _worker(queue, all_searches, num_queries, ip_to_search, all_results):
         while not queue.empty():
-            ip = await queue.get()
-            logging.debug(
-                f"processing {ip} - max_search_results: {max_search_results} -"
+            host = await queue.get()
+            logging.info(
+                f"processing {host} - max_search_results: {max_search_results} -"
                 f" pivot_threshold: {pivot_threshold} - query_prefix: {query_prefix} -"
                 f" cache_dir: {workspace} - workers: {workers} - at_time: {at_time} -"
                 f" depth: {depth} - save: {save} min_pivot_weight: {min_pivot_weight}"
             )
 
             runner = CenseyeRunner(
-                ip,
+                host,
                 duo_reporting=query_prefix_count,
                 query_prefix=query_prefix,
                 cache_dir=workspace,
@@ -601,21 +593,16 @@ def main(
                 gadgets=armed_gadgets,
             )
 
-            searches, queries = await runner.run()
+            searches, results, queries = await runner.run()
+            runner.report(results, searches)
 
-            ip_to_search[ip] = searches
+            ip_to_search[host] = searches
             all_searches.update(searches)
-            all_results.append(runner.results)
+            all_results.append(results)
             num_queries[0] += queries
             queue.task_done()
 
-    async def _run_stdin():
-        wqueue = asyncio.Queue()
-        for line in sys.stdin:
-            ip = line.strip()
-            if ip:
-                await wqueue.put(_parse_ip(ip))
-
+    async def _runner(queue):
         searches = set()
         num_queries = [0]
         tasks = []
@@ -624,62 +611,57 @@ def main(
 
         for _ in range(input_workers):
             tasks.append(
-                _run_worker(wqueue, searches, num_queries, ip_to_search, all_results)
+                _worker(queue, searches, num_queries, ip_to_search, all_results)
             )
 
         await asyncio.gather(*tasks)
 
-        # for r in all_results:
-        #    session["results"].append(r[0])
+        for res in all_results:
+            session.results.extend(res)
 
-        # session["searches"].extend(searches)
+        session.searches = list(searches)
 
-        # create a reverse map of ip_to_search, search to ips -- for the final report
-        search_to_ip = defaultdict(set)
-        for ip, search_terms in ip_to_search.items():
-            for s in search_terms:
-                search_to_ip[s].add(ip)
+        if not reading_from_stdin:
+            return
 
         console.print(f"\nTotal interesting search terms: {len(searches)}")
 
         for s in searches:
             ul = urllib.parse.quote(s)
-            # pad the host count with spaces to make the output look nice
-            hc_fmt = f"{len(search_to_ip[s])}".zfill(4)
             console.print(
-                f" - ({hc_fmt}) [link=https://search.censys.io/search?resource=hosts&q={ul}]{s}[/link]"
+                f" - [link=https://search.censys.io/search?resource=hosts&q={ul}]{s}[/link]"
             )
-            for ip in search_to_ip[s]:
-                link = f"https://search.censys.io/hosts/{ip}"
-                console.print(f"   - [link={link}]{ip}[/link]")
 
         console.print(f"\nTotal queries used: {num_queries[0]}")
 
+    async def _mapper():
+        queue = asyncio.Queue()
+
+        if reading_from_stdin:
+            logging.info("processing IPs from stdin")
+            for line in sys.stdin:
+                if host := line.strip():
+                    await queue.put(_parse_ip(host))
+        else:
+            await queue.put(_parse_ip(ip))
+
+        await _runner(queue)
+
     if ip == "-" or not ip:
-        logging.info("processing IPs from stdin")
-        asyncio.run(_run_stdin())
-    else:
-        runner = CenseyeRunner(
-            _parse_ip(ip),
-            depth=depth,
-            cache_dir=workspace,
-            console=console,
-            at_time=at_time,
-            query_prefix=query_prefix,
-            duo_reporting=query_prefix_count,
-            config=cfg,
-            gadgets=armed_gadgets,
-        )
-        searches, _ = asyncio.run(runner.run())
-        # session["results"] = runner.results
-        # session["searches"] = searches
+        reading_from_stdin = True
+
+    asyncio.run(_mapper())
 
     if save:
         console.save_html(save)
 
     if save_session:
         with open(save_session, "w") as f:
-            f.write(json.dumps(session, indent=2))
+            try:
+                session.save(f)
+            except ValueError as e:
+                logging.error(f"Error saving session: {e}")
+                exit(1)
 
 
 if __name__ == "__main__":
