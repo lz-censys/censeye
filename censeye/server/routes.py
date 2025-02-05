@@ -1,4 +1,5 @@
 import os
+import io
 import uuid
 import json
 
@@ -41,17 +42,19 @@ body {{
 """
 
 
+
 @app.route("/upload", methods=["POST"])
 def upload():
     if not request.is_json:
         return "invalid input", 400
 
     payload = request.json
+    print(payload)
 
     try:
-        Session().load(payload)
-    except:
-        return "not a valid session", 400
+        Session().load(io.BytesIO(request.data))
+    except ValueError as e:
+        return f"not a valid session {e}", 400
 
     uid = uuid.uuid4().hex
 

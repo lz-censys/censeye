@@ -1,5 +1,4 @@
 import json
-import jsonpickle
 import requests
 
 from dataclasses import dataclass
@@ -54,8 +53,8 @@ class Session:
             except json.JSONDecodeError:
                 raise ValueError("Invalid session file")
 
-        jconf = json.dumps(sess.get("conf", {}))
-        rconf = jsonpickle.decode(jconf)
+        jconf = sess.get("conf", {})
+        rconf = Config.from_dict(jconf)
 
         if not isinstance(rconf, Config):
             raise ValueError("Invalid config object in session file")
@@ -71,7 +70,7 @@ class Session:
 
     def _create_session(self):
         return {
-            "conf": json.loads(jsonpickle.encode(self.conf)),
+            "conf": self.conf.to_dict(),
             "args": self.args,
             "results": self.results,
             "searches": self.searches,

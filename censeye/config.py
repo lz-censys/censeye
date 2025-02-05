@@ -1,6 +1,6 @@
 import os
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import Any, Optional, Union
 
 import yaml
@@ -8,6 +8,14 @@ import yaml
 from .gadgets import unarmed_gadgets
 
 IgnoreType = Optional[Union[list[str], list[dict[str, list[str]]]]]
+
+
+def _from_dict(cls, data):
+    return cls(**data)
+
+
+def _from_list(cls, data_list):
+    return [_from_dict(cls, item) for item in data_list]
 
 
 @dataclass
@@ -26,6 +34,13 @@ class Field:
     def __hash__(self) -> int:
         return hash(self.name)
 
+    def to_dict(self):
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data):
+        return _from_dict(cls, data)
+
 
 @dataclass
 class Gadget:
@@ -33,6 +48,13 @@ class Gadget:
     aliases: list[str]
     enabled: bool = False
     config: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self):
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data):
+        return _from_dict(cls, data)
 
     def __hash__(self) -> int:
         return hash((self.name, frozenset(self.aliases)))
@@ -49,6 +71,14 @@ class Gadgets:
         if gadgets is None:
             gadgets = set()
         self.gadgets = gadgets
+
+    def to_dict(self):
+        return [gadget.to_dict() for gadget in self.gadgets]
+
+    @classmethod
+    def from_dict(cls, data):
+        gadgets = set(_from_list(Gadget, data))
+        return cls(gadgets)
 
     def __iter__(self):
         return iter(self.gadgets)
@@ -109,6 +139,15 @@ class Gadgets:
 
 @dataclass
 class Config:
+    workers: int = 2
+    max_serv_count: int = 20
+    max_search_res: int = 45
+    min_host_count: int = 2
+    max_host_count: int = 120
+    min_pivot_weight: float = 0.0
+    gadgets: Gadgets = field(default_factory=Gadgets)
+    fields: list[Field] = field(default_factory=list)
+
     def __init__(self, config_file=None) -> None:
         self._load_defauts()
 
@@ -127,6 +166,17 @@ class Config:
                 )
             except FileNotFoundError:
                 pass
+
+    def __post_init__(self):
+        for name, gadget in unarmed_gadgets.items():
+            self.gadgets.add(
+                Gadget(
+                    name=name,
+                    aliases=gadget.aliases,
+                    config=gadget.config,
+                    enabled=False,
+                )
+            )
 
     def _load_defauts(self) -> None:
         self.workers = 2
@@ -549,6 +599,39 @@ class Config:
                         enabled=item.get("enabled", False),
                     )
                 )
+
+    def to_dict(self):
+        return {
+            "workers": self.workers,
+            "max_serv_count": self.max_serv_count,
+            "max_search_res": self.max_search_res,
+            "min_host_count": self.min_host_count,
+            "max_host_count": self.max_host_count,
+            "min_pivot_weight": self.min_pivot_weight,
+            "gadgets": self.gadgets.to_dict(),
+            "fields": [field.to_dict() for field in self.fields],
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        instance = cls()
+        instance.workers = data.get("workers", instance.workers)
+        instance.max_serv_count = data.get("max_serv_count", instance.max_serv_count)
+        instance.max_search_res = data.get("max_search_res", instance.max_search_res)
+        instance.min_host_count = data.get("min_host_count", instance.min_host_count)
+        instance.max_host_count = data.get("max_host_count", instance.max_host_count)
+        instance.min_pivot_weight = data.get(
+            "min_pivot_weight", instance.min_pivot_weight
+        )
+        instance.gadgets = (
+            Gadgets.from_dict(data["gadgets"])
+            if "gadgets" in data
+            else instance.gadgets
+        )
+        instance.fields = (
+            _from_list(Field, data["fields"]) if "fields" in data else instance.fields
+        )
+        return instance
 
     def __iter__(self):
         return iter(self.fields)
