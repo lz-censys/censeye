@@ -1,13 +1,9 @@
 import asyncio
 import logging
 import sys
-import json
-import io
 import urllib.parse
 from collections import defaultdict
 from typing import Optional
-
-import jsonpickle
 
 import click
 from appdirs import user_cache_dir
@@ -120,17 +116,6 @@ class CenseyeRunner:
         for host in result:
             link = host.get("href", f"https://search.censys.io/hosts/{host['ip']}")
 
-            """
-            if "at_time" in host and host["at_time"] is not None:
-                try:
-                    at_encoded = urllib.parse.quote(
-                        host["at_time"].isoformat(timespec="milliseconds") + "Z"
-                    )
-                    link = f"{link}?at_time={at_encoded}"
-                except Exception:
-                    pass
-            """
-
             title = (
                 f"[link={link}]{host['ip']}[/link] (depth: {host['depth']}) (Via:"
                 f" {host['parent_ip']} -- {host['found_via']} -- {host['labels']})"
@@ -232,6 +217,8 @@ class CenseyeRunner:
                 self.console.print()
 
         self.console.print(f"Interesting search terms: {len(searches)}")
+        searches.sort()
+
         for s in searches:
             ul = urllib.parse.quote(s)
             self.console.print(
@@ -293,12 +280,9 @@ class CenseyeRunner:
     async def run(self):
         result, searches = await self.censeye.run(self.ip)
         searches = sorted(searches)
-
         results = self._mapper(result)
-        # self.report(results, searches)
 
         return searches, results, self.censeye.get_num_queries()
-        # return searches, self.censeye.get_num_queries()
 
 
 @click.command(
@@ -416,15 +400,6 @@ class CenseyeRunner:
 @click.option("--list-gadgets", is_flag=True, help="list available gadgets")
 @click.option("--save-session", "-ss", default=None, help="save session to a file")
 @click.option("--load-session", "-ls", default=None, help="load session from a file")
-@click.option(
-    "--output-format",
-    "-o",
-    "-of",
-    type=click.Choice(["pretty", "json"], case_sensitive=False),
-    default="pretty",
-    show_default=True,
-    help="output format",
-)
 @click.version_option(__version__)
 def main(
     ip,
@@ -447,7 +422,6 @@ def main(
     list_gadgets,
     save_session,
     load_session,
-    output_format,
 ):
     reading_from_stdin = False
     saved_args = {
@@ -532,11 +506,7 @@ def main(
             ),
         )
 
-    ofile = sys.stdout
-    # if save_session:
-    #    ofile = io.StringIO()
-
-    console = Console(record=True, soft_wrap=True, file=ofile)
+    console = Console(record=True, soft_wrap=True, file=sys.stdout)
 
     if list_gadgets:
         table = Table(title="available gadgets", box=box.MINIMAL_DOUBLE_HEAD)
@@ -559,7 +529,6 @@ def main(
             logging.error(f"Error loading session: {e}")
             exit(1)
 
-        print(session.results)
         CenseyeRunner(
             session.args.get("ip", None),
             console=console,
@@ -626,7 +595,7 @@ def main(
 
         console.print(f"\nTotal interesting search terms: {len(searches)}")
 
-        for s in searches:
+        for s in sorted(list(searches)):
             ul = urllib.parse.quote(s)
             console.print(
                 f" - [link=https://search.censys.io/search?resource=hosts&q={ul}]{s}[/link]"
@@ -662,7 +631,6 @@ def main(
             except ValueError as e:
                 logging.error(f"Error saving session: {e}")
                 exit(1)
-
 
 if __name__ == "__main__":
     main()
