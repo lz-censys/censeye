@@ -40,15 +40,23 @@ body {{
 </html>
 """
 
+
 @app.route("/upload", methods=["POST"])
 def upload():
     if not request.is_json:
         return "invalid input", 400
 
+    payload = request.json
+
+    try:
+        Session().load(payload)
+    except:
+        return "not a valid session", 400
+
     uid = uuid.uuid4().hex
 
     with open(f'{app.config["UPLOAD_PATH"]}/{uid}', "w") as f:
-        f.write(json.dumps(request.json))
+        f.write(json.dumps(payload))
 
     return {"id": uid}, 200
 
@@ -92,12 +100,9 @@ def view(uid):
     if format in ("text", "txt"):
         return (
             Response(console.export_text(), content_type="text/plain; charset=utf-8"),
-
             200,
         )
     elif format == "svg":
         return console.export_svg(), 200
 
     return console.export_html(theme=theme, code_format=HTML_FORMAT), 200
-
-

@@ -400,6 +400,16 @@ class CenseyeRunner:
 @click.option("--list-gadgets", is_flag=True, help="list available gadgets")
 @click.option("--save-session", "-ss", default=None, help="save session to a file")
 @click.option("--load-session", "-ls", default=None, help="load session from a file")
+@click.option(
+    "--upload-session", "-us", is_flag=True, help="upload session to a server"
+)
+@click.option(
+    "--session-server",
+    "-S",
+    envvar="CENSEYE_SERVER",
+    default=None,
+    help="session server to use",
+)
 @click.version_option(__version__)
 def main(
     ip,
@@ -422,6 +432,8 @@ def main(
     list_gadgets,
     save_session,
     load_session,
+    upload_session,
+    session_server,
 ):
     reading_from_stdin = False
     saved_args = {
@@ -524,7 +536,12 @@ def main(
 
     if load_session:
         try:
-            session.load(sys.stdin if load_session == "-" else open(load_session, "r"))
+            if session_server:
+                session.load(load_session, server=session_server)
+            else:
+                session.load(
+                    sys.stdin if load_session == "-" else open(load_session, "r")
+                )
         except ValueError as e:
             logging.error(f"Error loading session: {e}")
             exit(1)
@@ -631,6 +648,13 @@ def main(
             except ValueError as e:
                 logging.error(f"Error saving session: {e}")
                 exit(1)
+    if upload_session:
+        try:
+            ret = session.upload(session_server)
+            logging.info(f"Uploaded session: {ret}")
+        except ValueError as e:
+            logging.error(f"Error uploading session: {e}")
+            exit(1)
 
 
 if __name__ == "__main__":

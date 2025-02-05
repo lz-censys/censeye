@@ -1,5 +1,6 @@
 import json
 import jsonpickle
+import requests
 
 from dataclasses import dataclass
 from .config import Config
@@ -28,12 +29,30 @@ class Session:
         self.args = args or {}
         self.results = results or []
         self.searches = searches or []
+        self.server = None
 
-    def load(self, input):
-        try:
-            sess = json.load(input)
-        except json.JSONDecodeError:
-            raise ValueError("Invalid session file")
+    def _fetch_session(self, server, id):
+        if not server.startswith("http") and not server.startswith("https"):
+            server = f"http://{server}"
+
+        url = f"{server}/view/{id}/raw"
+        rsp = requests.get(url)
+
+        if rsp.status_code != 200:
+            raise ValueError(f"failed to fetch session {id}: {rsp.text}")
+
+        return json.loads(rsp.text)
+
+    def load(self, input, server=None):
+        sess = None
+
+        if server:
+            sess = self._fetch_session(server, input)
+        else:
+            try:
+                sess = json.load(input)
+            except json.JSONDecodeError:
+                raise ValueError("Invalid session file")
 
         jconf = json.dumps(sess.get("conf", {}))
         rconf = jsonpickle.decode(jconf)
@@ -50,11 +69,25 @@ class Session:
         with open(path, "r") as f:
             self.load(f)
 
-    def save(self, output):
-        sess = {
+    def _create_session(self):
+        return {
             "conf": json.loads(jsonpickle.encode(self.conf)),
             "args": self.args,
             "results": self.results,
             "searches": self.searches,
         }
-        json.dump(sess, output)
+
+    def save(self, output):
+        json.dump(self._create_session(), output)
+
+    def upload(self, server):
+        if not server.startswith("http") and not server.startswith("https"):
+            server = f"http://{server}"
+
+        url = f"{server}/upload"
+        rsp = requests.post(url, json=self._create_session())
+
+        if rsp.status_code != 200:
+            raise ValueError(f"failed to upload session: {rsp.text}")
+
+        return rsp.text
