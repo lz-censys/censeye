@@ -1,7 +1,9 @@
 import json
+import logging
+from dataclasses import dataclass
+
 import requests
 
-from dataclasses import dataclass
 from .config import Config
 
 
@@ -30,17 +32,38 @@ class Session:
         self.searches = searches or []
         self.server = None
 
-    def _fetch_session(self, server, id):
+    def _fetch_session(self, server, id, path="/view/{id}/raw"):
         if not server.startswith("http") and not server.startswith("https"):
             server = f"http://{server}"
 
-        url = f"{server}/view/{id}/raw"
+        url = f"{server}{path.format(id=id)}"
         rsp = requests.get(url)
 
         if rsp.status_code != 200:
             raise ValueError(f"failed to fetch session {id}: {rsp.text}")
 
         return json.loads(rsp.text)
+
+    def load_from_url(self, url):
+        rsp = requests.get(url)
+        if rsp.status_code != 200:
+            raise ValueError(f"failed to fetch session {url}: {rsp.text}")
+
+        try:
+            sess = json.loads(rsp.text)
+        except json.JSONDecodeError:
+            raise ValueError(f"Invalid session file: {rsp.text}")
+
+        jconf = sess.get("conf", {})
+        rconf = Config.from_dict(jconf)
+
+        if not isinstance(rconf, Config):
+            raise ValueError("Invalid config object in session file")
+
+        self.conf = rconf
+        self.args = sess.get("args", {})
+        self.results = sess.get("results", [])
+        self.searches = sess.get("searches", [])
 
     def load(self, input, server=None):
         sess = None
@@ -65,7 +88,7 @@ class Session:
         self.searches = sess.get("searches", [])
 
     def load_file(self, path):
-        with open(path, "r") as f:
+        with open(path) as f:
             self.load(f)
 
     def _create_session(self):
@@ -79,14 +102,16 @@ class Session:
     def save(self, output):
         json.dump(self._create_session(), output)
 
-    def upload(self, server):
+    def upload(self, server, path="/upload"):
         if not server.startswith("http") and not server.startswith("https"):
-            server = f"http://{server}"
+            server = f"https://{server}"
 
-        url = f"{server}/upload"
+        url = f"{server}{path}"
         rsp = requests.post(url, json=self._create_session())
+
+        logging.debug(f"upload response: {rsp.text}")
 
         if rsp.status_code != 200:
             raise ValueError(f"failed to upload session: {rsp.text}")
 
-        return rsp.text
+        return rsp.json().get("id", None)

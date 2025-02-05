@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import sys
 import urllib.parse
 from collections import defaultdict
@@ -17,10 +18,10 @@ from rich.tree import Tree
 from . import censeye
 from .__version__ import __version__
 from .config import Config
-from .session import Session
 from .const import DEFAULT_MAX_SEARCH_RESULTS
 from .gadget import GADGET_NAMESPACE, Gadget
 from .gadgets import unarmed_gadgets
+from .session import Session
 
 
 class CenseyeRunner:
@@ -321,7 +322,7 @@ class CenseyeRunner:
 @click.option(
     "--log-level",
     "-ll",
-    default=None,
+    default="ERROR",
     help="set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
 )
 @click.option("--save", "-s", default=None, help="save report to a file")
@@ -405,10 +406,17 @@ class CenseyeRunner:
 )
 @click.option(
     "--session-server",
+    "-SS",
     "-S",
     envvar="CENSEYE_SERVER",
     default=None,
-    help="session server to use",
+    help="session server to use, optionally set via CENSEYE_SERVER environment variable",
+)
+@click.option(
+    "--load-remote-session",
+    "-lrs",
+    default=None,
+    help="load session from a server either using the Censeye server API, or a direct session link",
 )
 @click.version_option(__version__)
 def main(
@@ -434,6 +442,7 @@ def main(
     load_session,
     upload_session,
     session_server,
+    load_remote_session,
 ):
     reading_from_stdin = False
     saved_args = {
@@ -518,7 +527,12 @@ def main(
             ),
         )
 
-    console = Console(record=True, soft_wrap=True, file=sys.stdout)
+    console = Console(
+        record=True,
+        soft_wrap=True,
+        file=sys.stdout,
+        quiet=True if (save_session and save_session == "-") else False,
+    )
 
     if list_gadgets:
         table = Table(title="available gadgets", box=box.MINIMAL_DOUBLE_HEAD)
@@ -534,18 +548,31 @@ def main(
         console.print(table)
         sys.exit(0)
 
-    if load_session:
+    if load_remote_session:
         try:
-            if session_server:
-                session.load(load_session, server=session_server)
+            if load_remote_session.startswith(
+                "http://"
+            ) or load_remote_session.startswith("https://"):
+                logging.info(f"loading session from {load_remote_session}")
+                session.load_from_url(load_remote_session)
             else:
-                session.load(
-                    sys.stdin if load_session == "-" else open(load_session, "r")
+                if not session_server:
+                    raise ValueError("session server must be specified")
+                logging.info(
+                    f"loading session {load_remote_session} from {session_server}"
                 )
+                session.load(load_remote_session, server=session_server)
+        except ValueError as e:
+            logging.error(f"Error loading session: {e}")
+            exit(1)
+    elif load_session:
+        try:
+            session.load(sys.stdin if load_session == "-" else open(load_session))
         except ValueError as e:
             logging.error(f"Error loading session: {e}")
             exit(1)
 
+    if load_session or load_remote_session:
         CenseyeRunner(
             session.args.get("ip", None),
             console=console,
@@ -554,7 +581,6 @@ def main(
             at_time=session.args.get("at_time"),
             query_prefix=session.args.get("query_prefix"),
         ).report(session.results, session.searches)
-
         exit(0)
 
     async def _worker(queue, all_searches, num_queries, ip_to_search, all_results):
@@ -642,16 +668,24 @@ def main(
         console.save_html(save)
 
     if save_session:
-        with open(save_session, "w") as f:
-            try:
-                session.save(f)
-            except ValueError as e:
-                logging.error(f"Error saving session: {e}")
-                exit(1)
+        fd = sys.stdout if save_session == "-" else open(save_session, "w")
+        try:
+            session.save(fd)
+        except ValueError as e:
+            logging.error(f"Error saving session: {e}")
+            exit(1)
+        fd.close()
+
     if upload_session:
         try:
             ret = session.upload(session_server)
-            logging.info(f"Uploaded session: {ret}")
+            url = re.sub(r"^(https?:\/\/)?[^:@]+:[^:@]+@", r"\1", session_server)
+            console.print()
+            console.print(f"session_id: [link={url}/view/{ret}]{ret}[/link]")
+            console.print(
+                f"session_url: [link={url}/view/{ret}]{url}/view/{ret}[/link]"
+            )
+            console.print(f"👇\n[bold]censeye -lrs {url}/view/{ret}/raw[/bold]")
         except ValueError as e:
             logging.error(f"Error uploading session: {e}")
             exit(1)
