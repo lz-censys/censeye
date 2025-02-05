@@ -632,5 +632,6 @@ def main(
                 logging.error(f"Error saving session: {e}")
                 exit(1)
 
+
 if __name__ == "__main__":
     main()

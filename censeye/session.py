@@ -23,6 +23,12 @@ class Session:
     results: list
     searches: list
 
+    def __init__(self, conf=None, args=None, results=None, searches=None):
+        self.conf = conf or Config()
+        self.args = args or {}
+        self.results = results or []
+        self.searches = searches or []
+
     def load(self, input):
         try:
             sess = json.load(input)
@@ -39,6 +45,10 @@ class Session:
         self.args = sess.get("args", {})
         self.results = sess.get("results", [])
         self.searches = sess.get("searches", [])
+
+    def load_file(self, path):
+        with open(path, "r") as f:
+            self.load(f)
 
     def save(self, output):
         sess = {
