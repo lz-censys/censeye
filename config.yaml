@@ -25,6 +25,12 @@ gadgets:
                                  # [4] `services.banner_hex=NNNNNNNN*`
                                  # [8] `services.banner_hex=NNNNNNNNNNNNNNNN*`
                                  # etc etc..
+  # The cookie-cutter gadget will look at HTTP services, take the `services.http.response.headers` as an input, and generate queries
+  # for the `Set-Cookie` header. The idea here is to check for patterns in the `Set-Cookie` header that may exist with protocols that
+  # use cookies for session management.
+  - gadget: cookie-cutter
+    enabled: false # can be enabled here, or with the cli with `--gadget cookie-cutter`
+
   - gadget: virustotal
     enabled: false
   - gadget: threatfox
@@ -339,6 +345,9 @@ fields:
     weight: 1.0
   # not actually used unless the nobbler gadget is enabled.
   - field: nobbler.gadget.censeye
+    weight: 0.8
+  # not actually used unless the cookie-cutter gadget is enabled.
+  - field: cookie-cutter.gadget.censeye
     weight: 1.0
   - field: services.ldap.attributes
     weight: 0.3

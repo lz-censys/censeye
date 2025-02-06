@@ -28,7 +28,7 @@ class NobblerGadget(QueryGeneratorGadget):
             self.config["iterations"] = [4, 8, 16, 32]
 
     def generate_query(self, host: dict) -> Optional[set[tuple[str, str]]]:
-        queries = set()
+        queries: set[tuple[str, str]] = set()
         for service in host.get("services", []):
             if service.get("service_name") == "UNKNOWN":
                 banner_hex = service.get("banner_hex", "")
@@ -38,7 +38,7 @@ class NobblerGadget(QueryGeneratorGadget):
                         nobbled = banner_hex[:i]
                         queries.add(
                             (
-                                "nobbler",
+                                self.name,
                                 f"services.banner_hex={nobbled}*",
                             )
                         )

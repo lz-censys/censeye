@@ -409,7 +409,11 @@ def main(
         cfg.min_pivot_weight = 0.0
 
     for g in gadget:
-        cfg.gadgets.enable(g)
+        try:
+            cfg.gadgets.enable(g)
+        except ValueError as e:
+            print(f"Error enabling gadget {g}: {e}")
+            sys.exit(1)
 
     armed_gadgets = set()
 

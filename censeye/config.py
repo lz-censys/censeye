@@ -151,6 +151,7 @@ class Config:
             # Field definitions for the query generator gadgets (if enabled), so we can use them for pivots
             Field(name="open-directory.gadget.censeye", weight=1.0, ignore=[]),
             Field(name="nobbler.gadget.censeye", weight=0.8, ignore=[]),
+            Field(name="cookie-cutter.gadget.censeye", weight=1.0, ignore=[]),
             # Field definitions for the search results
             Field(name="services.banner_hex", weight=1.0, ignore=[]),
             Field(name="services.ssh.endpoint_id.raw", weight=0.9, ignore=[]),
