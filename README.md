@@ -1,6 +1,6 @@
 # Contents
 
-* [Censeye](#censeye)
+- [Censeye](#censeye)
    * [Introduction](#introduction)
    * [Setup](#setup)
    * [How?](#how)
@@ -11,22 +11,27 @@
    * [Historical Certificates](#historical-certificates)
    * [Query Prefix Filtering](#query-prefix-filtering)
    * [Saving reports](#saving-reports)
+      + [HTML](#html)
+      + [Sessions](#sessions)
+         - [Session Files](#session-files)
+         - [Remote Session Files](#remote-session-files)
+         - [Session Server](#session-server)
    * [Gadgets](#gadgets)
-      * [Query Generators](#query-generators)
-      * [Host Labelers](#host-labelers)
-      * [Developing New Gadgets](#developing-new-gadgets)
+      + [Query Generators](#query-generators)
+      + [Host Labelers](#host-labelers)
+      + [Developing New Gadgets](#developing-new-gadgets)
    * [Configuration](#configuration)
-      * [Configuring Rarity](#configuring-rarity)
-      * [Configuring Fields](#configuring-fields)
-         * [Ignoring field values](#ignoring-field-values)
-         * [Field weights](#field-weights)
-         * [Value-only fields](#value-only-fields)
-      * [Configuring Gadgets](#configuring-gadgets)
-         * [Open Directory Gadget Configuration](#open-directory-gadget-configuration)
-         * [Nobbler Gadget Configuration](#nobbler-gadget-configuration)
+      + [Configuring Rarity](#configuring-rarity)
+      + [Configuring Fields](#configuring-fields)
+         - [Ignoring field values](#ignoring-field-values)
+         - [Field weights](#field-weights)
+         - [Value-only fields](#value-only-fields)
+      + [Configuring Gadgets](#configuring-gadgets)
+         - [Open Directory Gadget Configuration](#open-directory-gadget-configuration)
+         - [Nobbler Gadget Configuration](#nobbler-gadget-configuration)
    * [Workspaces](#workspaces)
    * [Contributing](#contributing)
-      * [Developer Setup](#developer-setup)
+      + [Developer Setup](#developer-setup)
 
 # Censeye
 
@@ -214,7 +219,103 @@ In the above example under "Interesting search terms" we can see the resulting s
 
 ## Saving reports
 
-If you wish to save the report as an HTML file, simply pass the `--save` flag with an output filename, and the whole thing is there.
+
+
+### HTML
+
+If you wish to save the report as an HTML file, simply pass the `--save` flag with an output filename, and the whole thing is there. Unlike [Sessions](#sessions), this is a static report and requires a browser to view.
+
+
+### Sessions
+
+Censeye session files are another (more portable) way to share a run with others. The contents of these files is a snapshot of the entire execution of a Censeye run, which can be rendered by external tools or Censeye itself.
+
+#### Session Files
+
+**Saving a session to a file**
+
+```shell
+$ censeye 1.1.1.1 --save-session output.session
+$ censeye 1.1.1.1 -ss output.session
+```
+
+**Reading a session from a file**
+
+```shell
+$ censeye --load-session output.session
+$ censeye -ls output.session
+```
+
+**Reading a session from stdin**
+
+```shell
+$ cat file | censeye --load-session -
+$ cat file | censeye -ls -
+```
+
+**Writing a session to stdout**
+
+```shell
+$ censeye 1.1.1.1 --save-session -
+$ censeye 1.1.1.1 -ss -
+```
+
+#### Remote Session Files
+
+Optionally, Censeye session files can be loaded from a remote URL, for example, you can upload to session file to a GitHub gist and load it from there:
+
+```shell
+$ censeye --load-remote-session https://gist.githubusercontent.com/lz-censys/138981f686f3714a3b944d600d3783de/raw/adca984548b8c778fee7298c9d0828bafa49cf5a/blah.sess
+$ censeye -lrs https://gist.githubusercontent.com/lz-censys/138981f686f3714a3b944d600d3783de/raw/adca984548b8c778fee7298c9d0828bafa49cf5a/blah.sess
+```
+
+#### Session Server
+
+**NOTE: This feature is an experiment.**
+
+Included with the Censeye python API is a bare-bones RESTful server implementation which can be used to store, retrieve,and render Censeye session files.
+
+**Starting the server**
+
+```shell
+$ python -m censeye.server -l 127.0.0.1:5000
+```
+
+**Saving a session to the server**
+
+* `--session-server`, `-SS` or `CENSEYE_SERVER` environment variable to specify the server URL
+* `--upload-session` or `-us` to upload the session to the server
+
+```shell
+$ censeye --session-server http://localhost:5000 --upload-session 1.1.1.1
+$ censeye -SS http://localhost:5000 -us 1.1.1.1
+$ CENSEYE_SERVER=http://localhost:5000 censeye -us 1.1.1.1
+```
+
+Along with the normal Censeye report output, a few new lines will be added to the end of the report which show you the different ways to view the stored session:
+
+```
+session_id: f9348b88a82f486dabf2d9a2a0b1309a
+session_url: http://localhost:5000/view/f9348b88a82f486dabf2d9a2a0b1309a
+
+censeye -lrs http://localhost:5000/view/f9348b88a82f486dabf2d9a2a0b1309a/raw
+```
+
+**Retrieving a session from the server**
+
+* `--session-server`, `-SS` or `CENSEYE_SERVER` environment variable to specify the server URL
+* `--load-remote-session` or `-lrs` to load a session from the server, the value is the session ID given to you when the session was uploaded (`session_id`).
+
+```shell
+$ censeye --session-server http://localhost:5000 --load-remote-session f9348b88a82f486dabf2d9a2a0b1309a
+$ censeye -SS http://localhost:5000 -lrs f9348b88a82f486dabf2d9a2a0b1309a
+```
+
+**Viewing a session in a browser**
+
+Simply paste the session link into your browser (or ctrl+click the link in the terminal output) and you will be taken to a page that looks like the terminal report:
+
+![simple screenshot](./static/browser.png)
 
 ## Gadgets
 

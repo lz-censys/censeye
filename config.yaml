@@ -349,5 +349,6 @@ fields:
   # not actually used unless the cookie-cutter gadget is enabled.
   - field: cookie-cutter.gadget.censeye
     weight: 1.0
-  - field: services.ldap.attributes
-    weight: 0.3
+  # Ldap inner searches broken in Censys right now
+  #- field: services.ldap.attributes
+  #  weight: 0.3
