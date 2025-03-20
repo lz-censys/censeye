@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import re
 import urllib.parse
 from collections import defaultdict
 from typing import Optional
@@ -13,6 +14,7 @@ from rich.console import Console
 from rich.style import Style
 from rich.table import Table
 from rich.tree import Tree
+
 
 from . import censeye
 from .__version__ import __version__
@@ -107,7 +109,7 @@ class CenseyeRunner:
 
         return ret
 
-    def report(self, result, searches):
+    def report(self, result, searches, search_term=None):
         style_bold = Style(bold=True)
         style_gadget = Style(bold=False, color="#5696CC")
         style_gadget_bold = Style(bold=True, color="#9FC3E2")
@@ -126,6 +128,10 @@ class CenseyeRunner:
                 title_justify="left",
                 box=box.SIMPLE_HEAVY,
             )
+
+            # if we have a search term, we don't want to display a table for a host if there are no
+            # matches.
+            should_render_table = False if search_term else True
 
             table.add_column("Hosts", justify="right", style="magenta")
             table.add_column("Key", justify="left", style="cyan", no_wrap=False)
@@ -188,12 +194,18 @@ class CenseyeRunner:
                     if "noprefix_hosts" in r:
                         count_col = f"{count_col} / {r['noprefix_hosts']}"
 
+                    if search_term:
+                        if search_term in r["key"] or search_term in r["val"]:
+                            # this host matched our search term input, so we want to display it
+                            should_render_table = True
+
                     table.add_row(count_col, key, r["val"], style=row_style)
                     seen_rows.add(row)
 
-            self.console.print(table)
+            if should_render_table:
+                self.console.print(table)
 
-            if len(hist_obs) > 0:
+            if should_render_table and len(hist_obs) > 0:
                 htree = Tree(f"Historical Certificate Observations: {len(hist_obs)}")
 
                 for k, v in hist_obs.items():
@@ -220,6 +232,8 @@ class CenseyeRunner:
 
         for s in searches:
             ul = urllib.parse.quote(s)
+            if search_term and search_term not in s:
+                continue
             self.console.print(
                 f" - [link=https://search.censys.io/search?resource=hosts&q={ul}]{s}[/link]"
             )
@@ -416,6 +430,12 @@ class CenseyeRunner:
     default=None,
     help="load session from a server either using the Censeye server API, or a direct session link",
 )
+@click.option(
+    "--search",
+    "-s",
+    default=None,
+    help="only display results that match this seach term",
+)
 @click.version_option(__version__)
 def main(
     ip,
@@ -441,6 +461,7 @@ def main(
     upload_session,
     session_server,
     load_remote_session,
+    search,
 ):
     reading_from_stdin = False
     saved_args = {
@@ -574,7 +595,7 @@ def main(
             depth=session.args.get("depth", 0),
             at_time=session.args.get("at_time"),
             query_prefix=session.args.get("query_prefix"),
-        ).report(session.results, session.searches)
+        ).report(session.results, session.searches, search_term=search)
         exit(0)
 
     async def _worker(queue, all_searches, num_queries, ip_to_search, all_results):
@@ -600,7 +621,7 @@ def main(
             )
 
             searches, results, queries = await runner.run()
-            runner.report(results, searches)
+            runner.report(results, searches, search_term=search)
 
             ip_to_search[host] = searches
             all_searches.update(searches)
