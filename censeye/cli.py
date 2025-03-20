@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import sys
-import re
 import urllib.parse
 from collections import defaultdict
 from typing import Optional
@@ -14,7 +13,6 @@ from rich.console import Console
 from rich.style import Style
 from rich.table import Table
 from rich.tree import Tree
-
 
 from . import censeye
 from .__version__ import __version__

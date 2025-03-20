@@ -1,13 +1,12 @@
 import json
 import logging
 from dataclasses import dataclass
-from urllib.parse import urlparse
-
-from .config import Config
-from .const import USER_AGENT
 
 import requests
 from requests.auth import HTTPBasicAuth
+
+from .config import Config
+from .const import USER_AGENT
 
 DEFAULT_UPLOAD_PATH = "/upload"
 DEFAULT_VIEW_PATH = "/view/{id}"
