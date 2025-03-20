@@ -1,10 +1,18 @@
 import json
 import logging
 from dataclasses import dataclass
-
-import requests
+from urllib.parse import urlparse
 
 from .config import Config
+from .const import USER_AGENT
+
+import requests
+from requests.auth import HTTPBasicAuth
+
+DEFAULT_UPLOAD_PATH = "/upload"
+DEFAULT_VIEW_PATH = "/view/{id}"
+
+requests.utils.default_user_agent = lambda: USER_AGENT
 
 
 @dataclass
@@ -31,19 +39,30 @@ class Session:
         self.results = results or []
         self.searches = searches or []
         self.server = None
+        self.username = None
+        self.password = None
+        self.auth = None
 
-    def _fetch_session(self, server, id, path="/view/{id}/raw"):
-        if not server.startswith("http") and not server.startswith("https"):
-            server = f"http://{server}"
+        if conf and conf.session_server:
+            if conf.session_server.username and conf.session_server.password:
+                self.username = conf.session_server.username
+                self.password = conf.session_server.password
+                self.auth = HTTPBasicAuth(self.username, self.password)
+            self.server = conf.session_server.server
 
-        url = f"{server}{path.format(id=id)}"
-        rsp = requests.get(url)
+    def view_url(self, id, path=DEFAULT_VIEW_PATH):
+        return f"{self.server}{path.format(id=id)}"
+
+    def _fetch_session(self, id, path=DEFAULT_VIEW_PATH):
+        url = f"{self.server}{path.format(id=id)}/raw"
+        rsp = requests.get(url, auth=self.auth)
 
         if rsp.status_code != 200:
             raise ValueError(f"failed to fetch session {id}: {rsp.text}")
 
         return json.loads(rsp.text)
 
+    """
     def load_from_url(self, url):
         rsp = requests.get(url)
         if rsp.status_code != 200:
@@ -64,17 +83,13 @@ class Session:
         self.args = sess.get("args", {})
         self.results = sess.get("results", [])
         self.searches = sess.get("searches", [])
+    """
 
-    def load(self, input, server=None):
-        sess = None
-
-        if server:
-            sess = self._fetch_session(server, input)
+    def load(self, input):
+        if isinstance(input, str):
+            sess = self._fetch_session(input)
         else:
-            try:
-                sess = json.load(input)
-            except json.JSONDecodeError:
-                raise ValueError("Invalid session file")
+            sess = json.load(input)
 
         jconf = sess.get("conf", {})
         rconf = Config.from_dict(jconf)
@@ -102,12 +117,9 @@ class Session:
     def save(self, output):
         json.dump(self._create_session(), output)
 
-    def upload(self, server, path="/upload"):
-        if not server.startswith("http") and not server.startswith("https"):
-            server = f"https://{server}"
-
-        url = f"{server}{path}"
-        rsp = requests.post(url, json=self._create_session())
+    def upload(self, path=DEFAULT_UPLOAD_PATH):
+        url = f"{self.server}{path}"
+        rsp = requests.post(url, json=self._create_session(), auth=self.auth)
 
         logging.debug(f"upload response: {rsp.text}")
 

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import re
 import sys
 import urllib.parse
 from collections import defaultdict
@@ -17,7 +16,7 @@ from rich.tree import Tree
 
 from . import censeye
 from .__version__ import __version__
-from .config import Config
+from .config import Config, SessionServer
 from .const import DEFAULT_MAX_SEARCH_RESULTS
 from .gadget import GADGET_NAMESPACE, Gadget
 from .gadgets import unarmed_gadgets
@@ -36,7 +35,6 @@ class CenseyeRunner:
         duo_reporting=False,
         config: Optional[Config] = None,
         gadgets: Optional[set[Gadget]] = None,
-        format: str = "pretty",
     ):
         if config is None:
             config = Config()
@@ -61,7 +59,7 @@ class CenseyeRunner:
         self.config = config
         self.gadgets = gadgets
         self.result = []
-        self.format = format
+
         self.censeye = censeye.Censeye(
             depth=depth,
             cache_dir=cache_dir,
@@ -481,6 +479,9 @@ def main(
     if slow:
         cfg.min_pivot_weight = 0.0
 
+    if session_server:
+        cfg.session_server = SessionServer.from_url(session_server)
+
     for g in gadget:
         try:
             cfg.gadgets.enable(g)
@@ -554,18 +555,7 @@ def main(
 
     if load_remote_session:
         try:
-            if load_remote_session.startswith(
-                "http://"
-            ) or load_remote_session.startswith("https://"):
-                logging.info(f"loading session from {load_remote_session}")
-                session.load_from_url(load_remote_session)
-            else:
-                if not session_server:
-                    raise ValueError("session server must be specified")
-                logging.info(
-                    f"loading session {load_remote_session} from {session_server}"
-                )
-                session.load(load_remote_session, server=session_server)
+            session.load(load_remote_session)
         except ValueError as e:
             logging.error(f"Error loading session: {e}")
             exit(1)
@@ -682,14 +672,11 @@ def main(
 
     if upload_session:
         try:
-            ret = session.upload(session_server)
-            url = re.sub(r"^(https?:\/\/)?[^:@]+:[^:@]+@", r"\1", session_server)
-            console.print()
-            console.print(f"session_id: [link={url}/view/{ret}]{ret}[/link]")
-            console.print(
-                f"session_url: [link={url}/view/{ret}]{url}/view/{ret}[/link]"
-            )
-            console.print(f"👇\n[bold]censeye -lrs {url}/view/{ret}/raw[/bold]")
+            ret = session.upload()
+            url = session.view_url(ret)
+            console.print(f"\nsession_id: [link={url}]{ret}[/link]")
+            console.print(f"session_url: [link={url}]{url}[/link]")
+            console.print(f"[bold]censeye -lrs {ret} -SS {session.server}[/bold]")
         except ValueError as e:
             logging.error(f"Error uploading session: {e}")
             exit(1)

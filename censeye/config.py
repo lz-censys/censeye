@@ -2,6 +2,7 @@ import os
 import warnings
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional, Union
+from urllib.parse import urlparse
 
 import yaml
 
@@ -138,6 +139,44 @@ class Gadgets:
 
 
 @dataclass
+class SessionServer:
+    server: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    base: Optional[str] = None
+
+    def to_dict(self):
+        return asdict(self)
+
+    @classmethod
+    def from_url(cls, url):
+        s = cls()
+        u = urlparse(url)
+
+        s.server = f"{u.scheme}://{u.netloc}"
+        s.username = u.username
+        s.password = u.password
+        s.base = u.path
+
+        return s
+
+    def __post_init__(self):
+        if (
+            self.username
+            and self.username.startswith("${")
+            and self.username.endswith("}")
+        ):
+            self.username = os.getenv(self.username[2:-1])
+
+        if (
+            self.password
+            and self.password.startswith("${")
+            and self.password.endswith("}")
+        ):
+            self.password = os.getenv(self.password[2:-1])
+
+
+@dataclass
 class Config:
     workers: int = 2
     max_serv_count: int = 20
@@ -147,6 +186,7 @@ class Config:
     min_pivot_weight: float = 0.0
     gadgets: Gadgets = field(default_factory=Gadgets)
     fields: list[Field] = field(default_factory=list)
+    session_server: Optional[SessionServer] = None
 
     def __init__(self, config_file=None) -> None:
         self._load_defauts()
@@ -186,6 +226,7 @@ class Config:
         self.max_host_count = 120
         self.min_pivot_weight = 0.0
         self.gadgets = Gadgets()
+        # self.session_server = SessionServer()
 
         for name, gadget in unarmed_gadgets.items():
             self.gadgets.add(
@@ -572,6 +613,9 @@ class Config:
         self.max_host_count = cfg.get("rarity", {}).get("max", self.max_host_count)
         self.min_pivot_weight = cfg.get("min_pivot_weight", self.min_pivot_weight)
         self.gadgets = cfg.get("gadgets", self.gadgets)
+
+        if "session_server" in cfg:
+            self.session_server = SessionServer(**cfg["session_server"])
 
         if "fields" in cfg:
             for item in cfg["fields"]:
