@@ -4,9 +4,9 @@ max_search_results: 45  # number of search results to process (if depth > 0)
 min_pivot_weight: 0.0  # only pivot into fields that have a weight greater than this
 
 #session_server:
-  #server: "http://127.0.0.1:5000"
-  #username: ${CENSEYE_USERNAME}
-  #password: ${CENSEYE_PASSWORD}
+#  server: "https://censeye.net"
+#  username: ${CENSEYE_USERNAME}
+#  password: ${CENSEYE_PASSWORD}
 
 rarity:
   min: 2               # minimum host count for a field to be treated as "interesting"
@@ -26,7 +26,7 @@ gadgets:
   - gadget: nobbler
     enabled: false # can be enabled here, or with the cli with `--gadget nobbler`
     config:
-      iterations: [4, 8, 16, 32] # generate wildcard banner_hex queries of these lengths, for example
+      iterations: [2, 4, 8, 16, 32] # generate wildcard banner_hex queries of these lengths, for example
                                  # [4] `services.banner_hex=NNNNNNNN*`
                                  # [8] `services.banner_hex=NNNNNNNNNNNNNNNN*`
                                  # etc etc..

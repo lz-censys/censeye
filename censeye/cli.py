@@ -107,7 +107,7 @@ class CenseyeRunner:
 
         return ret
 
-    def report(self, result, searches, search_term=None):
+    def report(self, result, searches, search_terms=Optional[tuple[str]]):
         style_bold = Style(bold=True)
         style_gadget = Style(bold=False, color="#5696CC")
         style_gadget_bold = Style(bold=True, color="#9FC3E2")
@@ -128,8 +128,8 @@ class CenseyeRunner:
             )
 
             # if we have a search term, we don't want to display a table for a host if there are no
-            # matches.
-            should_render_table = False if search_term else True
+            # matches. So, if search_terms is empty, we will render the table no matter what.
+            should_render_table = False if search_terms else True
 
             table.add_column("Hosts", justify="right", style="magenta")
             table.add_column("Key", justify="left", style="cyan", no_wrap=False)
@@ -192,10 +192,12 @@ class CenseyeRunner:
                     if "noprefix_hosts" in r:
                         count_col = f"{count_col} / {r['noprefix_hosts']}"
 
-                    if search_term:
-                        if search_term in r["key"] or search_term in r["val"]:
-                            # this host matched our search term input, so we want to display it
-                            should_render_table = True
+                    if search_terms:
+                        for search_term in search_terms:
+                            if search_term in r["key"] or search_term in r["val"]:
+                                # this host matched our search term input, so we want to display it
+                                should_render_table = True
+                                break
 
                     table.add_row(count_col, key, r["val"], style=row_style)
                     seen_rows.add(row)
@@ -230,8 +232,19 @@ class CenseyeRunner:
 
         for s in searches:
             ul = urllib.parse.quote(s)
-            if search_term and search_term not in s:
+            should_render = False
+
+            if search_terms:
+                for search_term in search_terms:
+                    if search_term in s:
+                        should_render = True
+                        break
+            else:
+                should_render = True
+
+            if not should_render:
                 continue
+
             self.console.print(
                 f" - [link=https://search.censys.io/search?resource=hosts&q={ul}]{s}[/link]"
             )
@@ -432,7 +445,8 @@ class CenseyeRunner:
     "--search",
     "-s",
     default=None,
-    help="only display results that match this seach term",
+    multiple=True,
+    help="only display results that match this seach term (Can be used multiple times, e.g., -s foo -s bar, which will display results that match 'foo' **OR** 'bar')",
 )
 @click.version_option(__version__)
 def main(
@@ -593,7 +607,7 @@ def main(
             depth=session.args.get("depth", 0),
             at_time=session.args.get("at_time"),
             query_prefix=session.args.get("query_prefix"),
-        ).report(session.results, session.searches, search_term=search)
+        ).report(session.results, session.searches, search_terms=search)
         exit(0)
 
     async def _worker(queue, all_searches, num_queries, ip_to_search, all_results):
@@ -619,7 +633,7 @@ def main(
             )
 
             searches, results, queries = await runner.run()
-            runner.report(results, searches, search_term=search)
+            runner.report(results, searches, search_terms=search)
 
             ip_to_search[host] = searches
             all_searches.update(searches)
