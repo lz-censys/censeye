@@ -113,12 +113,22 @@ class Session:
             "searches": self.searches,
         }
 
+    def _serialize_datetime(self, dt):
+        import datetime
+
+        if isinstance(dt, datetime.datetime):
+            return dt.isoformat()
+        raise TypeError(f"Type {type(dt)} not serializable")
+
     def save(self, output):
-        json.dump(self._create_session(), output)
+        json.dump(self._create_session(), output, default=self._serialize_datetime)
 
     def upload(self, path=DEFAULT_UPLOAD_PATH):
         url = f"{self.server}{path}"
-        rsp = requests.post(url, json=self._create_session(), auth=self.auth)
+        dat = json.dumps(self._create_session(), default=self._serialize_datetime)
+        rsp = requests.post(
+            url, data=dat, auth=self.auth, headers={"Content-Type": "application/json"}
+        )
 
         logging.debug(f"upload response: {rsp.text}")
 
